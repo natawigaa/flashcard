@@ -5,6 +5,7 @@ const AuthContext = createContext()
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
+  const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -16,6 +17,12 @@ export function AuthProvider({ children }) {
       } = await supabase.auth.getSession()
       if (!mounted) return
       setUser(session?.user ?? null)
+      // load profile when session exists
+      if (session?.user) {
+        try { await loadProfile(session.user.id) } catch (e) { console.error('loadProfile', e) }
+      } else {
+        setProfile(null)
+      }
       // ensure profile exists for signed-in user
       if (session?.user) await ensureProfile(session.user)
       setLoading(false)
@@ -25,8 +32,13 @@ export function AuthProvider({ children }) {
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null)
-      // when auth changes and we have a user, ensure there's a profile row
-      if (session?.user) ensureProfile(session.user).catch((e) => console.error('ensureProfile', e))
+      // when auth changes and we have a user, ensure there's a profile row and load profile
+      if (session?.user) {
+        ensureProfile(session.user).catch((e) => console.error('ensureProfile', e))
+        loadProfile(session.user.id).catch((e) => console.error('loadProfile', e))
+      } else {
+        setProfile(null)
+      }
       setLoading(false)
     })
 
@@ -47,6 +59,22 @@ export function AuthProvider({ children }) {
       if (error) console.error('profiles upsert error', error)
     } catch (e) {
       console.error('ensureProfile error', e)
+    }
+  }
+
+  async function loadProfile(userId) {
+    if (!userId) return null
+    try {
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single()
+      if (error) {
+        console.error('loadProfile error', error)
+        return null
+      }
+      setProfile(data)
+      return data
+    } catch (e) {
+      console.error('loadProfile', e)
+      return null
     }
   }
 
@@ -77,7 +105,7 @@ export function AuthProvider({ children }) {
   const signOut = () => supabase.auth.signOut()
 
   return (
-    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signOut, refreshProfile: () => loadProfile(user?.id) }}>
       {children}
     </AuthContext.Provider>
   )

@@ -14,7 +14,8 @@ export default function DeckEditor() {
   const [description, setDescription] = useState('')
   const [numToAdd, setNumToAdd] = useState(1)
   const [loading, setLoading] = useState(false)
-  const STORAGE_BUCKET = 'flascard_image'
+  // Use the actual storage bucket name in your Supabase project
+  const STORAGE_BUCKET = 'flashcard_image'
 
   useEffect(() => {
     if (!user) return
@@ -162,7 +163,8 @@ export default function DeckEditor() {
 
         // prepare inserts, uploading images when present
         const inserts = []
-        for (const c of cards) {
+        for (let i = 0; i < cards.length; i++) {
+          const c = cards[i]
           if (!(c.front && c.back)) continue
           let front_image_url = null
           let back_image_url = null
@@ -170,10 +172,19 @@ export default function DeckEditor() {
           if (c.frontFile) {
             try {
               const filename = `uploads/${user.id}/${newDeck.id}/${Date.now()}-${Math.random().toString(36).slice(2)}-front` + (c.frontFile.name ? `-${c.frontFile.name}` : '')
-              const { error: upErr } = await supabase.storage.from(STORAGE_BUCKET).upload(filename, c.frontFile)
-              if (upErr) throw upErr
+              console.debug('Uploading front file', filename, c.frontFile && c.frontFile.name, c.frontFile && c.frontFile.size)
+              const { data: upData, error: upErr } = await supabase.storage.from(STORAGE_BUCKET).upload(filename, c.frontFile)
+              if (upErr) {
+                console.error('Upload front failed', upErr, upData)
+                throw upErr
+              }
               // store private path
               front_image_url = filename
+              // try to create a signed URL immediately for preview in the editor
+              try {
+                const { data: urlData, error: sErr } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(filename, 60 * 60)
+                if (!sErr && urlData?.signedUrl) updateCard(i, 'frontImage', urlData.signedUrl)
+              } catch (e) { console.debug('signed url after upload front', e) }
             } catch (e) {
               console.error('Front upload failed', e)
             }
@@ -181,9 +192,17 @@ export default function DeckEditor() {
           if (c.backFile) {
             try {
               const filename = `uploads/${user.id}/${newDeck.id}/${Date.now()}-${Math.random().toString(36).slice(2)}-back` + (c.backFile.name ? `-${c.backFile.name}` : '')
-              const { error: upErr } = await supabase.storage.from(STORAGE_BUCKET).upload(filename, c.backFile)
-              if (upErr) throw upErr
+              console.debug('Uploading back file', filename, c.backFile && c.backFile.name, c.backFile && c.backFile.size)
+              const { data: upData, error: upErr } = await supabase.storage.from(STORAGE_BUCKET).upload(filename, c.backFile)
+              if (upErr) {
+                console.error('Upload back failed', upErr, upData)
+                throw upErr
+              }
               back_image_url = filename
+              try {
+                const { data: urlData, error: sErr } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(filename, 60 * 60)
+                if (!sErr && urlData?.signedUrl) updateCard(i, 'backImage', urlData.signedUrl)
+              } catch (e) { console.debug('signed url after upload back', e) }
             } catch (e) {
               console.error('Back upload failed', e)
             }
@@ -206,23 +225,29 @@ export default function DeckEditor() {
         // existing cards: handle inserts with images and updates including image uploads
         // Insert new cards
         const toInsert = []
-        for (const c of cards.filter((c) => !c.id && c.front && c.back)) {
+        for (let i = 0; i < cards.length; i++) {
+          const c = cards[i]
+          if (c.id || !c.front || !c.back) continue
           let front_image_url = null
           let back_image_url = null
           if (c.frontFile) {
             try {
               const filename = `uploads/${user.id}/${id}/${Date.now()}-${Math.random().toString(36).slice(2)}-front` + (c.frontFile.name ? `-${c.frontFile.name}` : '')
-              const { error: upErr } = await supabase.storage.from(STORAGE_BUCKET).upload(filename, c.frontFile)
-              if (upErr) throw upErr
+              console.debug('Uploading front file (toInsert)', filename, c.frontFile && c.frontFile.name)
+              const { data: upData, error: upErr } = await supabase.storage.from(STORAGE_BUCKET).upload(filename, c.frontFile)
+              if (upErr) { console.error('Upload front (toInsert) failed', upErr, upData); throw upErr }
               front_image_url = filename
+              try { const { data: urlData, error: sErr } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(filename, 60 * 60); if (!sErr && urlData?.signedUrl) updateCard(i, 'frontImage', urlData.signedUrl) } catch (e) { console.debug(e) }
             } catch (e) { console.error(e) }
           }
           if (c.backFile) {
             try {
               const filename = `uploads/${user.id}/${id}/${Date.now()}-${Math.random().toString(36).slice(2)}-back` + (c.backFile.name ? `-${c.backFile.name}` : '')
-              const { error: upErr } = await supabase.storage.from(STORAGE_BUCKET).upload(filename, c.backFile)
-              if (upErr) throw upErr
+              console.debug('Uploading back file (toInsert)', filename, c.backFile && c.backFile.name)
+              const { data: upData, error: upErr } = await supabase.storage.from(STORAGE_BUCKET).upload(filename, c.backFile)
+              if (upErr) { console.error('Upload back (toInsert) failed', upErr, upData); throw upErr }
               back_image_url = filename
+              try { const { data: urlData, error: sErr } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(filename, 60 * 60); if (!sErr && urlData?.signedUrl) updateCard(i, 'backImage', urlData.signedUrl) } catch (e) { console.debug(e) }
             } catch (e) { console.error(e) }
           }
           toInsert.push({ deck_id: id, front: c.front, back: c.back, front_image_url, back_image_url })
@@ -234,33 +259,40 @@ export default function DeckEditor() {
         }
 
         // Update existing cards (text and optionally image)
-        for (const c of cards.filter((c) => c.id)) {
+        for (let i = 0; i < cards.length; i++) {
+          const c = cards[i]
+          if (!c.id) continue
           const updates = { front: c.front, back: c.back }
           // if a new file is present, upload and set the url
           if (c.frontFile) {
             try {
               const filename = `uploads/${user.id}/${id}/${Date.now()}-${Math.random().toString(36).slice(2)}-front` + (c.frontFile.name ? `-${c.frontFile.name}` : '')
-              const { error: upErr } = await supabase.storage.from(STORAGE_BUCKET).upload(filename, c.frontFile)
-              if (upErr) throw upErr
+              console.debug('Uploading front file (update)', filename, c.frontFile && c.frontFile.name)
+              const { data: upData, error: upErr } = await supabase.storage.from(STORAGE_BUCKET).upload(filename, c.frontFile)
+              if (upErr) { console.error('Upload front (update) failed', upErr, upData); throw upErr }
               // store the object's path in DB (private bucket)
               updates.front_image_url = filename
               // remove old file after successful upload
               if (c.front_image_url) {
                 try { await removeFileByPath(STORAGE_BUCKET, c.front_image_url) } catch (e) { console.error('Failed to remove previous front image', e) }
               }
+              // update preview
+              try { const { data: urlData, error: sErr } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(filename, 60 * 60); if (!sErr && urlData?.signedUrl) updateCard(i, 'frontImage', urlData.signedUrl) } catch (e) { console.debug(e) }
             } catch (e) { console.error(e) }
           }
           if (c.backFile) {
             try {
               const filename = `uploads/${user.id}/${id}/${Date.now()}-${Math.random().toString(36).slice(2)}-back` + (c.backFile.name ? `-${c.backFile.name}` : '')
-              const { error: upErr } = await supabase.storage.from(STORAGE_BUCKET).upload(filename, c.backFile)
-              if (upErr) throw upErr
+              console.debug('Uploading back file (update)', filename, c.backFile && c.backFile.name)
+              const { data: upData, error: upErr } = await supabase.storage.from(STORAGE_BUCKET).upload(filename, c.backFile)
+              if (upErr) { console.error('Upload back (update) failed', upErr, upData); throw upErr }
               // store object path
               updates.back_image_url = filename
               // remove old file after successful upload
               if (c.back_image_url) {
                 try { await removeFileByPath(STORAGE_BUCKET, c.back_image_url) } catch (e) { console.error('Failed to remove previous back image', e) }
               }
+              try { const { data: urlData, error: sErr } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(filename, 60 * 60); if (!sErr && urlData?.signedUrl) updateCard(i, 'backImage', urlData.signedUrl) } catch (e) { console.debug(e) }
             } catch (e) { console.error(e) }
           }
 
