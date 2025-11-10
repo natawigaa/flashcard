@@ -132,7 +132,11 @@ export default function DeckEditor() {
       if (!ok) return
     }
 
-    setLoading(true)
+  setLoading(true)
+  // show immediate status to the user
+  // we reuse browser alert for critical cases, but show inline status while saving
+  // set a short-lived info that will be visible during the save process
+  // (component shows loading state on the button as well)
     try {
       // ensure user is available
       if (!user || !user.id) {
@@ -151,7 +155,7 @@ export default function DeckEditor() {
         }
       }
 
-      if (id === 'new') {
+  if (id === 'new') {
         // create deck first
         const { data: newDeck, error: deckErr } = await supabase
           .from('decks')
@@ -216,7 +220,8 @@ export default function DeckEditor() {
           if (insertErr) throw insertErr
         }
 
-        navigate(`/deck/${newDeck.id}`)
+        // navigate back to dashboard and show a success toast there
+        navigate('/dashboard', { state: { toast: 'Deck created successfully' } })
       } else {
         // update deck title
         const { error: upErr } = await supabase.from('decks').update({ title, description }).eq('id', id)
@@ -303,8 +308,9 @@ export default function DeckEditor() {
           } catch (e) { console.error(e) }
         }
 
-        // reload
+        // reload then navigate back to dashboard with success toast
         await loadDeck()
+        navigate('/dashboard', { state: { toast: 'Deck saved' } })
       }
     } catch (e) {
       console.error(e)
@@ -428,7 +434,9 @@ export default function DeckEditor() {
       </div>
 
       <div style={{ marginTop: 12 }}>
-        <button onClick={save} disabled={loading}>{id === 'new' ? 'Create set' : 'Save Deck'}</button>
+        <button onClick={save} disabled={loading}>
+          {loading ? (id === 'new' ? 'Creating…' : 'Saving…') : (id === 'new' ? 'Create set' : 'Save Deck')}
+        </button>
       </div>
     </div>
     </Chrome>

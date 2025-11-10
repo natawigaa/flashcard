@@ -29,11 +29,48 @@ export default function History() {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
-    if (error) console.error('fetchSessions', error)
-    else setSessions(data || [])
+    if (error) {
+      console.error('fetchSessions', error)
+      setSessions([])
+      return
+    }
+
+    // log raw data to help debug duplicate cases (remove later if noisy)
+    console.debug('fetchSessions raw data', data)
+
+    // Deduplicate more robustly: sometimes rows can be duplicated due to
+    // joins or previous code changes. Use a composite key to remove exact
+    // duplicates while preserving ordering.
+    const seen = new Set()
+    const deduped = []
+    for (const s of (data || [])) {
+      // create a stable key: deck_id + created_at + score + duration
+      const keyParts = [s.deck_id, s.created_at, String(s.score), String(s.duration_seconds)]
+      const key = keyParts.join('::')
+      if (seen.has(key)) continue
+      seen.add(key)
+      deduped.push(s)
+    }
+
+    setSessions(deduped)
   }
 
   if (loading) return <div style={{ padding: 20 }}>Loading...</div>
+
+  // sometimes the query can return duplicate rows (e.g. accidental join issues or
+  // previous code changes). Deduplicate by session id before rendering so each
+  // study session only appears once in the UI.
+  const displaySessions = (() => {
+    const seen = new Set()
+    const out = []
+    for (const s of sessions) {
+      if (!s || !s.id) continue
+      if (seen.has(s.id)) continue
+      seen.add(s.id)
+      out.push(s)
+    }
+    return out
+  })()
 
   return (
     <Chrome>
@@ -41,11 +78,11 @@ export default function History() {
         <h2>Study history</h2>
       </div>
 
-      {sessions.length === 0 ? (
+      {displaySessions.length === 0 ? (
         <p>No study sessions yet. Play some decks to generate history.</p>
       ) : (
         <div className="history-list">
-          {sessions.map((s) => {
+          {displaySessions.map((s) => {
             const deckTitle = s.decks?.title || (Array.isArray(s.decks) ? s.decks[0]?.title : 'Deck')
             const when = s.created_at ? new Date(s.created_at).toLocaleString() : ''
             const duration = fmtDuration(s.duration_seconds)

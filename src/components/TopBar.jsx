@@ -22,7 +22,22 @@ export default function TopBar({ user, onSearch, signOut }) {
   return (
     <header className="topbar">
       <div className="topbar-inner">
-        <div className="topbar-left">{user ? `Hello, ${displayName}` : 'Not signed in'}</div>
+        <div className="topbar-left">
+          <Link to="/" className="brand" aria-label="Flash Learn home">
+            {/* simple flash / lightning mark */}
+            <svg className="brand-mark" viewBox="0 0 24 24" width="40" height="40" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+              <defs>
+                <linearGradient id="g1" x1="0%" x2="100%" y1="0%" y2="0%">
+                  <stop offset="0%" stopColor="#4aa3ff" />
+                  <stop offset="100%" stopColor="#1e90ff" />
+                </linearGradient>
+              </defs>
+              <path d="M13.5 2L6 13h5l-1 9L18 11h-5l.5-9z" fill="url(#g1)" />
+            </svg>
+            <span className="brand-text">Flash Learn</span>
+          </Link>
+          {user ? <div className="greeting">— Hello, {displayName}</div> : null}
+        </div>
         <div className="topbar-center">
           <input
             className="search-box"

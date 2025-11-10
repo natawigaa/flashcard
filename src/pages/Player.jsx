@@ -19,6 +19,7 @@ export default function Player() {
   const containerRef = useRef()
   const sessionStartRef = useRef(null)
   const studySavedRef = useRef(false)
+  const recentSavesRef = useRef(new Map())
 
   useEffect(() => {
     if (!id) return
@@ -31,6 +32,34 @@ export default function Player() {
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  // When the user finishes a run save the session as a guarded side-effect.
+  // Wait until we have results for every card to avoid saving incomplete data.
+  useEffect(() => {
+    const runFinished = index >= cards.length
+    const haveResults = results && results.length >= Math.max(1, cards.length)
+    if (runFinished && haveResults && !studySavedRef.current) {
+      // mark as in-progress immediately so concurrent effect runs don't start
+      studySavedRef.current = true
+
+      const correct = results.filter(Boolean).length
+      const total = results.length || cards.length || 0
+      const pct = total === 0 ? 0 : Math.round((correct / total) * 100)
+      const started = sessionStartRef.current || Date.now()
+      const duration = Math.max(0, Date.now() - started) / 1000
+
+      console.debug('Attempting saveStudySession', { pct, duration, total, runFinished, haveResults })
+
+      // save asynchronously; if save fails, reset the flag so app can retry
+      saveStudySession(pct, duration, Boolean(originalCards))
+        .then(({ error }) => {
+          if (error) studySavedRef.current = false
+        })
+        .catch(() => { studySavedRef.current = false })
+    }
+    // we intentionally do not include saveStudySession in deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, cards.length, results, originalCards])
 
   async function load() {
     setLoading(true)
@@ -142,6 +171,25 @@ export default function Player() {
         duration_seconds: Math.round(durationSeconds),
         is_focused: isFocused,
       }
+      // defensive: avoid duplicate inserts by checking a short-lived in-memory map
+      try {
+        const started = sessionStartRef.current || Date.now()
+        const key = `${user.id}::${id}::${Math.round(started / 1000)}`
+        const now = Date.now()
+        const last = recentSavesRef.current.get(key)
+        if (last && (now - last) < 60_000) {
+          console.debug('Skipping duplicate saveStudySession (recent)', { key })
+          return { data: null, error: null }
+        }
+        recentSavesRef.current.set(key, now)
+        // prune old entries
+        for (const [k, t] of recentSavesRef.current.entries()) {
+          if (now - t > 5 * 60 * 1000) recentSavesRef.current.delete(k)
+        }
+      } catch (e) {
+        /* ignore guard errors */
+      }
+
       const { data, error } = await supabase.from('study_sessions').insert(payload)
       if (error) {
         console.error('saveStudySession error', error)
@@ -176,12 +224,7 @@ export default function Player() {
   const pctIncorrect = total === 0 ? 0 : Math.round((incorrect / total) * 100)
 
   // Save a study_session row once per finished run (focused or full)
-  if (!studySavedRef.current) {
-    const started = sessionStartRef.current || Date.now()
-    const duration = Math.max(0, Date.now() - started) / 1000
-    // save asynchronously, don't block render. studySavedRef will be set on success
-    saveStudySession(pct, duration, Boolean(originalCards)).catch(() => {})
-  }
+  
 
     return (
       <div className="player-container">
