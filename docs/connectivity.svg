@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700">
+  <style>
+    .node{fill:#041025;stroke:#0b1220;stroke-width:2}
+    .card{fill:#071020;stroke:#0d1320;stroke-width:1}
+    .label{fill:#e6eef8;font-family:Inter, Arial, sans-serif;font-size:14px}
+    .title{fill:#9fd1ff;font-weight:700;font-size:18px}
+    .line{stroke:#7f9aa8;stroke-width:2;marker-end:url(#arr)}
+  </style>
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#7f9aa8"/>
+    </marker>
+  </defs>
+
+  <text x="40" y="40" class="title">Connectivity diagram — typical flows</text>
+
+  <!-- User Browser -->
+  <rect x="60" y="80" width="220" height="80" class="node" rx="10"/>
+  <text x="80" y="120" class="label">User Browser</text>
+  <text x="80" y="140" class="label">(React SPA)</text>
+
+  <!-- CDN / Static Host -->
+  <rect x="340" y="80" width="260" height="80" class="node" rx="10"/>
+  <text x="360" y="120" class="label">CDN / Static Host</text>
+  <text x="360" y="140" class="label">(Vercel / Netlify)</text>
+
+  <!-- Server -->
+  <rect x="680" y="80" width="240" height="80" class="node" rx="10"/>
+  <text x="700" y="120" class="label">Express Server</text>
+  <text x="700" y="140" class="label">(server/index.js)</text>
+
+  <!-- Supabase -->
+  <rect x="960" y="80" width="220" height="120" class="node" rx="10"/>
+  <text x="980" y="110" class="label">Supabase</text>
+  <text x="980" y="130" class="label">Auth / Postgres / Storage</text>
+  <text x="980" y="150" class="label">(RLS, migrations)</text>
+
+  <!-- arrows top row -->
+  <line x1="280" y1="120" x2="340" y2="120" class="line"/>
+  <line x1="600" y1="120" x2="680" y2="120" class="line"/>
+  <line x1="920" y1="120" x2="960" y2="120" class="line"/>
+
+  <!-- Flows block -->
+  <text x="60" y="240" class="title">Flows</text>
+
+  <g transform="translate(60,260)">
+    <rect x="0" y="0" width="1080" height="360" class="card" rx="12"/>
+    <text x="16" y="28" class="label">Login:</text>
+    <text x="16" y="48" class="label">Browser → supabase.auth.signInWithPassword(...) → Supabase returns session → AuthContext updates UI</text>
+
+    <text x="16" y="92" class="label">Create deck (client):</text>
+    <text x="16" y="112" class="label">Browser → supabase.from('decks').insert(...) (anon key) → DB writes row → frontend receives ID → navigate to /dashboard</text>
+
+    <text x="16" y="156" class="label">Upload image:</text>
+    <text x="16" y="176" class="label">Option A (client): Browser → supabase.storage.upload(...) (if policy allows)</text>
+    <text x="16" y="196" class="label">Option B (server proxy): Browser → /api/upload → Server (service role) → supabase.storage.upload(...) → returns signed URL</text>
+
+    <text x="16" y="240" class="label">Save study session:</text>
+    <text x="16" y="260" class="label">Browser → supabase.from('study_sessions').insert(payload)</text>
+    <text x="16" y="280" class="label">Repo includes client-side guards; consider DB unique constraint/session_key to prevent duplicates</text>
+
+    <text x="16" y="320" class="label">CI/Deploy/Secrets:</text>
+    <text x="16" y="340" class="label">- CI: GitHub Actions runs build/test (ci.yml)</text>
+    <text x="16" y="360" class="label">- Deploy: Frontend static build → Vercel/Netlify; Server → Render/Heroku/Vercel</text>
+    <text x="16" y="380" class="label">- Secrets: client uses VITE_SUPABASE_ANON_KEY; server uses SUPABASE_SERVICE_ROLE_KEY (keep secret)</text>
+  </g>
+</svg>
